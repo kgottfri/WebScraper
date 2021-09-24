@@ -4,73 +4,71 @@ first iteration of webscraper will just test skihood"""
 from bs4 import BeautifulSoup
 import requests
 from sys import exit
+import pandas as pd
 from tabulate import tabulate
 
-base_url = "https://www.timberlinelodge.com/mountain/lift-tickets"
-base_data = ["Age, Time, Price"]
-#define global str for age category to search
-CHOICE_CATEGORY_MAPPING = {}
+base_url = "https://www.timberlinelodge.com/mountain/season-passes"
 
-def get_Results():
-    # Utilize a get request to gather HTML text from webpage and save as BeautifulSoup object
+
+def GetTicketType():
     soup = BeautifulSoup(requests.get(base_url).text, 'html.parser')
-    prices = soup.find_all('td')
-    return prices
+    soup_header = soup.find_all('h3')
+    ticket_data = CheckExtraHeader(soup_header)
+    return ticket_data
 
 
-def set_Category(prices, CHOICES):
-    i = 0
-    for x in range(0, len(prices)//3):
-        if x == 0:
-            CHOICES[x + 1] = prices[i].string
-            i +=3
-        elif x <= len(prices) -1:
-            CHOICES[x +1] = prices[i].string
-            i += 3
-    return CHOICES
+
+def SetTicketType(categories):
+    TICKET_CATEGORY_MAPPING = {}
+    for x in range(0, len(categories)):
+        curr_tag = categories[x]
+        TICKET_CATEGORY_MAPPING[x] = (curr_tag)
+    return TICKET_CATEGORY_MAPPING
 
 
-def prompt_Category(category):
-    choice = prices
-    print("Choose your ticket age:")
-    for x in range(0, len(choice)):
-        print(str(x) + ": " + str(choice[x]))
+# Takes a dictionary arg that is the different season pass choices
+# Return the input integer that represents the dictionary index
+def PromptTicketType(tickets):
+    #loop though
+    i = 1
+    for ticket in tickets:
+        ticket_str = ticket.string
+        ticket_str = ticket_str.replace("&nbsp", " ")
+        print(str(i) + ":" + ticket_str)
+        i += 1
 
-
-def get_Age():
-    choice = int(input("Enter Choice: "))
+    choice = int(input("Enter Ticket Type: "))
     curr_category = None
+    # Test if the input is a choice listed
     try:
-        curr_category = CHOICE_CATEGORY_MAPPING[choice]
+        curr_category = tickets[choice - 1]
     except KeyError:
         print("Wrong Choice Entered. Exiting!")
         exit(1)
-    return curr_category
+
+    return choice
+
+# Takes the dictionary arg and parses the table data of the page related to that dictionary
+# Prints the final output which is pass price information
+def GetResults(choice):
+    r = requests.get(base_url)
+    price_list = pd.read_html(r.text)  # this parses all the tables in webpages to a list
+
+    # get the ticket choice index and subtract one which starts at 1, subtract that to get list index of table
+    curr_prices = price_list[choice - 1]
+    print(tabulate(curr_prices, headers='keys'))
+
+# Takes the ticket dictionary and parses out any unwanted headers related to javascript titles
+def CheckExtraHeader(ticket_data):
+    clean_ticket_data = []
+    for x in ticket_data:
+        curr_tag_lower = str(x).lower()
+        if curr_tag_lower.find('pass') is not -1:
+            clean_ticket_data.append(x)
+    return clean_ticket_data
 
 
-def get_Price(price, category):
-    curr_category = category
-    for i in range(0, len(price)):
-        curr_age = price[i]
-        if curr_category in curr_age:
-            if i+2 <= len(price):
-                curr_time = price[i+1]
-                curr_price = price[i+2]
-                return curr_age.string, curr_time.string, curr_price.string
-            else:
-                print("Price not available... exiting")
-                exit(1)
-        else:
-            i+=1
-    return print("Couldn't parse HTML... exiting"), exit(1)
-
-
-prices = get_Results()
-category = set_Category(prices, CHOICE_CATEGORY_MAPPING)
-# prompt_Category(category)
-
-category = get_Age()
-price = get_Price(prices, category)
-print("\n", tabulate([[price[0], price[1], price[2]]], headers=['Age', 'Time', 'Price']))
-
-
+categories = GetTicketType()
+tickets = SetTicketType(categories)
+ticket_choice, choice = PromptTicketType(tickets)
+GetResults(choice)
